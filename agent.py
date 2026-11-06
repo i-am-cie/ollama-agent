@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ollama-agent — A tiny local AI agent that can read/write files and run commands.
-Powered by Ollama + Qwen2.5. No API keys. No cloud. ~150 lines.
+Powered by Ollama + Qwen2.5. No API keys. No cloud. ~200 lines.
 
 Usage:
     pip install requests
@@ -17,7 +17,7 @@ import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = os.environ.get("AGENT_MODEL", "qwen2.5:7b")
-MAX_STEPS = 12
+MAX_STEPS = 15
 
 SYSTEM_PROMPT = """你是一个能使用工具完成任务的 AI 助手。你运行在用户的电脑上。
 
@@ -26,6 +26,8 @@ SYSTEM_PROMPT = """你是一个能使用工具完成任务的 AI 助手。你运
 - write_file(path, content)：把内容写入文件
 - run_command(cmd)：执行一条 shell 命令并返回输出
 - list_dir(path=".")：列出目录下的文件
+- search_in_files(keyword, path=".")：在文件中搜索关键词，返回匹配的文件和行号
+- git_status()：查看当前git仓库的状态
 
 工作方式：
 1. 思考当前该做什么
@@ -82,11 +84,47 @@ def list_dir(path: str = ".") -> str:
     return "\n".join(lines) if lines else "(空目录)"
 
 
+def search_in_files(keyword: str, path: str = ".") -> str:
+    """Search for a keyword in files recursively."""
+    matches = []
+    for root, dirs, files in os.walk(path):
+        # Skip hidden dirs and common ignores
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv")]
+        for fname in files:
+            if fname.startswith("."):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                    for i, line in enumerate(f, 1):
+                        if keyword.lower() in line.lower():
+                            matches.append(f"{fpath}:{i}: {line.strip()[:100]}")
+                            if len(matches) >= 20:
+                                return "\n".join(matches) + f"\n... (还有更多匹配，共 {len(matches)} 条)"
+            except:
+                pass
+    return "\n".join(matches) if matches else f"未找到包含 '{keyword}' 的文件"
+
+
+def git_status() -> str:
+    """Show git status of the current repo."""
+    try:
+        result = subprocess.run(
+            "git status --short && echo '---' && git log --oneline -5",
+            shell=True, capture_output=True, text=True, timeout=10
+        )
+        return result.stdout.strip() or "(干净的工作区)"
+    except Exception as e:
+        return f"不是git仓库或出错: {e}"
+
+
 TOOLS = {
     "read_file": read_file,
     "write_file": write_file,
     "run_command": run_command,
     "list_dir": list_dir,
+    "search_in_files": search_in_files,
+    "git_status": git_status,
 }
 
 
