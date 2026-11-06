@@ -1,6 +1,6 @@
 # ollama-agent
 
-> A tiny local AI agent that can read files, write files, and run shell commands — powered entirely by Ollama. No API keys, no cloud, ~150 lines of Python.
+> A tiny local AI agent that can read files, write files, search code, check git status, and run shell commands — powered entirely by Ollama. No API keys, no cloud, ~200 lines of Python.
 
 ```
 🎯 任务: 帮我把当前目录下所有 .txt 文件合并成一个 notes.txt
@@ -20,7 +20,7 @@ Every "build an AI agent" tutorial tells you to install LangChain, pull in a vec
 - **One file.** Read it in 5 minutes.
 - **No frameworks.** Just `requests` + Ollama.
 - **Fully offline.** Your code never leaves your machine.
-- **ReAct loop.** Think → act → observe → repeat, implemented in ~150 lines.
+- **ReAct loop.** Think → act → observe → repeat, implemented in ~200 lines.
 
 ## Quick Start
 
@@ -51,8 +51,17 @@ python agent.py
 | `write_file(path, content)` | Create or overwrite a file |
 | `run_command(cmd)` | Run a shell command (30s timeout) |
 | `list_dir(path)` | List directory contents |
+| `search_in_files(keyword, path)` | Search for keywords across files |
+| `git_status()` | Show git status and recent commits |
 
-Give it any task that involves reading files, writing notes, or running commands — it figures out the steps itself.
+Give it any task that involves reading files, writing notes, searching code, checking git, or running commands — it figures out the steps itself.
+
+## Example Tasks
+
+- "帮我找出项目里所有用到 `TODO` 的地方"
+- "看看当前git状态，帮我写一个commit message"
+- "把这个文件夹里所有的.md文件合并成一个文档"
+- "分析这个Python项目的结构，总结每个模块的作用"
 
 ## How it works
 
@@ -93,10 +102,12 @@ ollama-agent/
 
 ## Roadmap
 
-- [ ] Web UI (Gradio)
+- [x] Add `search_in_files` tool
+- [x] Add `git_status` tool
+- [ ] Web UI (Gradio/Flask)
 - [ ] Edit existing files (diff-based)
-- [ ] Add a "search" tool for finding keywords in files
 - [ ] Streaming output
+- [ ] More tools (web search, python exec)
 
 ## License
 
