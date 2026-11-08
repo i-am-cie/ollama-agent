@@ -4,7 +4,7 @@ ollama-agent — A tiny local AI agent that can read/write files and run command
 Powered by Ollama + Qwen2.5. No API keys. No cloud. ~200 lines.
 
 Usage:
-    pip install requests
+    pip install -r requirements.txt
     ollama pull qwen2.5:7b
     python agent.py
 """
@@ -15,7 +15,10 @@ import sys
 
 import requests
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+if not OLLAMA_HOST.startswith(("http://", "https://")):
+    OLLAMA_HOST = "http://" + OLLAMA_HOST
+OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 MODEL = os.environ.get("AGENT_MODEL", "qwen2.5:7b")
 MAX_STEPS = 15
 
@@ -101,7 +104,7 @@ def search_in_files(keyword: str, path: str = ".") -> str:
                             matches.append(f"{fpath}:{i}: {line.strip()[:100]}")
                             if len(matches) >= 20:
                                 return "\n".join(matches) + f"\n... (还有更多匹配，共 {len(matches)} 条)"
-            except:
+            except (OSError, UnicodeError):
                 pass
     return "\n".join(matches) if matches else f"未找到包含 '{keyword}' 的文件"
 

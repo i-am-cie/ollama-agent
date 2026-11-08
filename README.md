@@ -1,118 +1,160 @@
 # ollama-agent
 
-> A tiny local AI agent that can read files, write files, search code, check git status, and run shell commands — powered entirely by Ollama. No API keys, no cloud, ~200 lines of Python.
+A ~200-line, single-file local AI agent that can read and write files, search
+code, inspect git state, and run shell commands. It talks to a local model served
+by [Ollama](https://ollama.com) — no API keys, no cloud, no agent framework.
 
-```
-🎯 任务: 帮我把当前目录下所有 .txt 文件合并成一个 notes.txt
-🤖 步骤 1: 先看看目录里有什么文件
-🔧 调用 list_dir({})
-📤 结果: 📄 a.txt 📄 b.txt 📄 README.md
-🤖 步骤 2: 读取两个 txt 文件内容
-🔧 调用 read_file({"path": "a.txt"})
-...
-✅ 最终答案: 已合并完成，notes.txt 共 2340 字符。
-```
+## What it does
 
-## Why
+`agent.py` runs a small ReAct-style loop: the model writes a JSON action, Python
+executes one of six local tools, the result is appended to the conversation, and
+the loop repeats until the model stops requesting tools or the step limit is hit.
+There is no function-calling API involved — only a system prompt plus JSON parsing.
 
-Every "build an AI agent" tutorial tells you to install LangChain, pull in a vector DB, get an OpenAI key, and wire together 10 abstract classes. This repo is the opposite:
+Available tools:
 
-- **One file.** Read it in 5 minutes.
-- **No frameworks.** Just `requests` + Ollama.
-- **Fully offline.** Your code never leaves your machine.
-- **ReAct loop.** Think → act → observe → repeat, implemented in ~200 lines.
+| Tool | Behaviour |
+|---|---|
+| `read_file(path)` | Read a UTF-8 text file (first 8000 characters) |
+| `write_file(path, content)` | Create/overwrite a file, creating parent directories |
+| `run_command(cmd)` | Run a shell command via `subprocess`, 30 s timeout, captures stdout/stderr |
+| `list_dir(path)` | List files and folders in a directory |
+| `search_in_files(keyword, path)` | Case-insensitive recursive text search (stops at 20 matches) |
+| `git_status()` | `git status --short` plus the last 5 commits |
 
-## Quick Start
+## Requirements
+
+- Python 3.8+
+- [Ollama](https://ollama.com/download) installed and running locally
+- A chat model that can follow the JSON-in-text instructions. The default is
+  `qwen2.5:7b`, because the system prompt is written for Qwen 2.5; other
+  instruction-following models generally work but may be less reliable.
 
 ```bash
-# 1. Install Ollama and pull a model
-#    https://ollama.com/download
 ollama pull qwen2.5:7b
-
-# 2. Clone and run
-git clone https://github.com/i-am-cie/ollama-agent.git
-cd ollama-agent
-pip install requests
-python agent.py "帮我列出当前目录的文件，并总结每个文件是干什么的"
 ```
 
-Or run interactively:
+A smaller model such as `qwen2.5:3b` needs less RAM/VRAM but may make more
+mistakes in the JSON format.
+
+## Install
+
+```bash
+git clone https://github.com/i-am-cie/ollama-agent.git
+cd ollama-agent
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Run
+
+Pass the task on the command line:
+
+```bash
+python agent.py "List the files in this directory and summarise what each one does"
+```
+
+Or start it interactively and type the task when prompted:
 
 ```bash
 python agent.py
-# 🎯 输入任务: 
 ```
 
-## What it can do
+At each step the script prints the model's thought, the tool call and a short
+preview of the tool result. When the model stops calling tools, its reply is
+printed as the final answer.
 
-| Tool | What it does |
-|---|---|
-| `read_file(path)` | Read any text file |
-| `write_file(path, content)` | Create or overwrite a file |
-| `run_command(cmd)` | Run a shell command (30s timeout) |
-| `list_dir(path)` | List directory contents |
-| `search_in_files(keyword, path)` | Search for keywords across files |
-| `git_status()` | Show git status and recent commits |
+## Usage
 
-Give it any task that involves reading files, writing notes, searching code, checking git, or running commands — it figures out the steps itself.
+Example tasks that fit the available tools:
 
-## Example Tasks
+- "Find every TODO in this project."
+- "Check the git status and suggest a commit message."
+- "Merge all Markdown files in this folder into one document."
+- "Summarise what each Python file in this directory does."
 
-- "帮我找出项目里所有用到 `TODO` 的地方"
-- "看看当前git状态，帮我写一个commit message"
-- "把这个文件夹里所有的.md文件合并成一个文档"
-- "分析这个Python项目的结构，总结每个模块的作用"
-
-## How it works
-
-The agent uses a simple **ReAct** loop:
-
-```
-User task
-    ↓
-LLM thinks: "I need to see what files exist first"
-    ↓
-LLM outputs JSON: {"action": "list_dir", "action_input": {}}
-    ↓
-Python executes list_dir() → returns the file list
-    ↓
-LLM sees the result: "Now I'll read a.txt"
-    ↓
-... repeat until LLM stops calling tools and gives a final answer
-```
-
-No function-calling API, no LangChain agents — just a well-crafted system prompt and JSON parsing.
+The model decides which tools to call and in what order; the script only executes
+one tool per step.
 
 ## Configuration
 
+| Setting | Where it comes from | Default |
+|---|---|---|
+| `OLLAMA_HOST` | environment variable (a bare `host:port` is also accepted) | `http://localhost:11434` |
+| `AGENT_MODEL` | environment variable | `qwen2.5:7b` |
+| `MAX_STEPS` | constant in `agent.py` | `15` |
+
 ```bash
-# Use a different model (anything Ollama supports)
-AGENT_MODEL=qwen2.5:3b python agent.py "你的任务"
+# Talk to an Ollama instance on another host/port
+OLLAMA_HOST=192.168.1.20:11434 python agent.py "list the files here"
+
+# Use a smaller model
+AGENT_MODEL=qwen2.5:3b python agent.py "summarise README.md"
 ```
 
-Lower VRAM? Use `qwen2.5:3b` (~2 GB).
+On Windows PowerShell use `$env:OLLAMA_HOST="..."` / `$env:AGENT_MODEL="..."`.
 
-## Project Structure
+The tool list and the JSON output format are defined by `SYSTEM_PROMPT` at the
+top of `agent.py`.
+
+## How it works
 
 ```
-ollama-agent/
-├── agent.py    # The entire agent (system prompt + tools + loop)
-└── README.md
+task ──► system prompt + task
+              │
+              ▼
+        POST /api/chat  ──► model reply (natural language, maybe JSON)
+              │
+              ▼
+    extract_action() ── no action ──► print final answer, stop
+              │ action
+              ▼
+      execute one tool, append observation to messages
+              │
+              └──► next step (up to MAX_STEPS)
 ```
 
-## Roadmap
+`extract_action()` takes the text between the first `{` and the last `}` and
+parses it as JSON. If parsing fails, or the action is not one of the known
+tools, the reply is treated as the final answer. The script is intentionally
+small: reading `agent.py` top to bottom is enough to change the tools, the
+prompt, or the loop.
 
-- [x] Add `search_in_files` tool
-- [x] Add `git_status` tool
-- [ ] Web UI (Gradio/Flask)
-- [ ] Edit existing files (diff-based)
-- [ ] Streaming output
-- [ ] More tools (web search, python exec)
+## Limitations
+
+- **No sandbox and no confirmation.** `run_command` executes whatever the model
+  writes, with your user permissions, and `write_file` can overwrite files.
+  Run it only in a directory you are willing to let a model modify.
+- **Model-dependent JSON.** If the model does not emit the expected JSON shape,
+  the reply is treated as the final answer; there is no retry or repair.
+- **Truncated observations.** File contents are cut at 8000 characters, command
+  stdout at 3000 characters, stderr at 1000; searches stop after 20 matches.
+- **Growing context.** Every observation is appended to the message list with no
+  trimming or summarisation, so long sessions grow until the model's context
+  limit is reached.
+- **Text files only.** `read_file` assumes UTF-8 (invalid bytes are replaced);
+  binary files are not handled.
+- **Single tool per step.** It cannot batch calls, and there is no streaming.
+- **Chinese system prompt.** The prompt asks the model to think and answer in
+  Chinese; edit `SYSTEM_PROMPT` if you want English output.
+- **No tests.** Correctness depends on the model's planning.
 
 ## License
 
-MIT — do whatever you want.
+[MIT](./LICENSE) © 2026 i-am-cie
 
----
+## 中文说明
 
-⭐ Star if this saves you an afternoon of figuring out how ReAct actually works.
+一个约 200 行、单文件的本地 AI Agent，用 Ollama 在本地跑模型，可以读写文件、
+在文件里搜索关键词、查看 git 状态、执行 shell 命令。不需要 API key，也没有
+LangChain 之类的框架。
+
+- **依赖**：Python 3.8+、本地已运行的 Ollama、一个能按提示输出 JSON 的模型（默认 `qwen2.5:7b`）。
+- **安装**：`pip install -r requirements.txt`，再 `ollama pull qwen2.5:7b`。
+- **运行**：`python agent.py "任务描述"`，或直接 `python agent.py` 交互输入。
+- **配置**：环境变量 `OLLAMA_HOST`（默认 `http://localhost:11434`）、`AGENT_MODEL`（默认 `qwen2.5:7b`）；`MAX_STEPS` 在 `agent.py` 里，默认 15。
+- **原理**：模型按系统提示输出 `{"thought": ..., "action": ..., "action_input": ...}`，脚本解析后执行对应工具，把结果追加回对话，循环直到模型不再调用工具。
+- **限制**：没有沙箱、没有执行确认，`run_command` 会以你的用户权限运行模型生成的命令，请只在可被修改的目录里使用；工具输出会被截断（文件 8000 字符、命令输出 3000 字符、搜索最多 20 条）；上下文不裁剪；只支持文本文件；系统提示是中文的。
+- **License**：MIT。
