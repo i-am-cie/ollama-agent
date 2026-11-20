@@ -66,6 +66,23 @@ At each step the script prints the model's thought, the tool call and a short
 preview of the tool result. When the model stops calling tools, its reply is
 printed as the final answer.
 
+## Tests
+
+The repository ships with a pytest suite that covers the six local tools, the
+JSON action parser, the LLM request payload, and the ReAct loop routing. Model
+calls and subprocess invocations are mocked, so the tests run without Ollama,
+network access, or any third-party service:
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the suite on
+every push to `main` and on pull requests. The tests validate the agent's own
+parsing and tool-dispatch logic; they do not judge the quality of the model's
+plans or replies.
+
 ## Usage
 
 Example tasks that fit the available tools:
@@ -139,7 +156,9 @@ prompt, or the loop.
 - **Single tool per step.** It cannot batch calls, and there is no streaming.
 - **Chinese system prompt.** The prompt asks the model to think and answer in
   Chinese; edit `SYSTEM_PROMPT` if you want English output.
-- **No tests.** Correctness depends on the model's planning.
+- **Tests cover the agent, not the model.** The pytest suite checks parsing,
+  tools and dispatch; whether the model picks good actions still depends on its
+  planning.
 
 ## License
 
@@ -155,6 +174,7 @@ LangChain 之类的框架。
 - **安装**：`pip install -r requirements.txt`，再 `ollama pull qwen2.5:7b`。
 - **运行**：`python agent.py "任务描述"`，或直接 `python agent.py` 交互输入。
 - **配置**：环境变量 `OLLAMA_HOST`（默认 `http://localhost:11434`）、`AGENT_MODEL`（默认 `qwen2.5:7b`）；`MAX_STEPS` 在 `agent.py` 里，默认 15。
+- **测试**：仓库自带 pytest 用例，覆盖六个本地工具、JSON action 解析、LLM 请求参数与主循环路由；模型调用和子进程均打桩，无需启动 Ollama 或联网即可运行，GitHub Actions 在 push / PR 时自动执行。本地运行：`pip install -r requirements-dev.txt && pytest tests/ -v`。
 - **原理**：模型按系统提示输出 `{"thought": ..., "action": ..., "action_input": ...}`，脚本解析后执行对应工具，把结果追加回对话，循环直到模型不再调用工具。
 - **限制**：没有沙箱、没有执行确认，`run_command` 会以你的用户权限运行模型生成的命令，请只在可被修改的目录里使用；工具输出会被截断（文件 8000 字符、命令输出 3000 字符、搜索最多 20 条）；上下文不裁剪；只支持文本文件；系统提示是中文的。
 - **License**：MIT。
